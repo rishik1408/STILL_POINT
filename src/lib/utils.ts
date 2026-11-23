@@ -110,6 +110,6 @@ export function clamp(value: number, min: number, max: number): number {
 /**
  * cn utility for conditional classNames
  */
-export function cn(...classes: (string | boolean | undefined | null)[]): string {
+export function cn(...classes: (string | boolean | undefined | null | number | unknown)[]): string {
   return classes.filter(Boolean).join(' ');
 }
