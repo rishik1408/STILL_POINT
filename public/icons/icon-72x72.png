@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#1B365D"/>
+  <text x="256" y="200" text-anchor="middle" font-family="system-ui" font-size="120" font-weight="800" fill="#FFFFFF">P</text>
+  <text x="256" y="340" text-anchor="middle" font-family="system-ui" font-size="72" font-weight="600" fill="#60A5FA">IAMS</text>
+  <circle cx="400" cy="380" r="60" fill="#15803D"/>
+  <path d="M380 380 L395 395 L420 365" stroke="white" stroke-width="12" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
