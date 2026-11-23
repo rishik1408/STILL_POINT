@@ -17,12 +17,100 @@ export async function POST(request: Request) {
       ticket_id,
     } = body;
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const groqKey =
+      process.env.GROQ_API_KEY ||
+      (process.env.GEMINI_API_KEY?.startsWith('gsk_')
+        ? process.env.GEMINI_API_KEY
+        : null);
 
-    // Graceful fallback if no GEMINI_API_KEY
-    if (!apiKey || apiKey === 'your-gemini-api-key') {
-      const subject = `[URGENT TICKET #${ticket_id || 'NEW'}] Level ${severity} Infrastructure Defect Notice: ${defect_category} at ${ward_name}`;
-      const emailBody = `
+    // 1. If Groq Key is available, use Groq's blazing-fast gpt-oss-120b model
+    if (groqKey) {
+      try {
+        const groqPrompt = `
+You are an expert civil engineer and municipal liaison drafting a formal infrastructure grievance notice for the city administration.
+Addressee: ${contact_name}, ${department_name}, ${ward_name}
+Defect: ${defect_category} (Severity Level ${severity} of 4)
+Technical Assessment: ${technical_summary}
+Citizen Observation: ${user_note || 'None recorded'}
+Coordinates: ${lat}° N, ${lng}° E
+SLA Requirement: ${severity === 4 ? '14' : '30'} Days
+
+Respond strictly in JSON with this exact schema:
+{
+  "subject": "[URGENT] Formal Grievance Notice...",
+  "body": "Full formal municipal complaint letter text..."
+}
+`;
+
+        const groqRes = await fetch(
+          'https://api.groq.com/openai/v1/chat/completions',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${groqKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'openai/gpt-oss-120b',
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    'You are the PIAMS formal municipal notice drafting engine. You must output valid, well-structured JSON only.',
+                },
+                { role: 'user', content: groqPrompt },
+              ],
+              response_format: { type: 'json_object' },
+            }),
+          }
+        );
+
+        if (groqRes.ok) {
+          const groqData = await groqRes.json();
+          const content = groqData.choices?.[0]?.message?.content;
+          if (content) {
+            const parsed = JSON.parse(content);
+            return NextResponse.json({ ...parsed, provider: 'groq' });
+          }
+        }
+      } catch (err) {
+        console.warn('Groq draft error, falling back:', err);
+      }
+    }
+
+    // 2. Fallback to Gemini if standard Gemini key is present
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (
+      geminiKey &&
+      !geminiKey.startsWith('gsk_') &&
+      geminiKey !== 'your-gemini-api-key'
+    ) {
+      const ai = new GoogleGenAI({ apiKey: geminiKey });
+      const prompt = `
+Draft a formal municipal complaint letter from the PIAMS civic platform.
+Addressee: ${contact_name}, ${department_name}, ${ward_name}
+Defect: ${defect_category} (Severity ${severity}/4)
+Technical Assessment: ${technical_summary}
+Citizen Note: ${user_note || 'None'}
+Coordinates: ${lat}° N, ${lng}° E
+SLA Requirement: ${severity === 4 ? '14' : '30'} Days
+
+Respond in JSON with:
+{ "subject": string, "body": string }
+`;
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: { responseMimeType: 'application/json' },
+      });
+
+      const parsed = JSON.parse(response.text || '{}');
+      return NextResponse.json({ ...parsed, provider: 'gemini' });
+    }
+
+    // 3. Fallback Template
+    const subject = `[URGENT TICKET #${ticket_id || 'NEW'}] Level ${severity} Infrastructure Defect Notice: ${defect_category} at ${ward_name}`;
+    const emailBody = `
 To: ${contact_name}
 ${department_name}
 Municipal Corporation of Greater Mumbai (${ward_name})
@@ -50,47 +138,19 @@ Kindly dispatch the Ward Maintenance Unit to inspect and execute corrective repa
 Sincerely,
 PIAMS Autonomous Civic Triage Engine
 Department of Municipal Infrastructure Oversight
-      `.trim();
+    `.trim();
 
-      return NextResponse.json({
-        subject,
-        body: emailBody,
-        is_mock_fallback: true,
-      });
-    }
-
-    const ai = new GoogleGenAI({ apiKey });
-    const prompt = `
-Draft a formal, polite, and authoritative municipal complaint letter from the PIAMS civic platform to a city engineer.
-Details:
-- Addressee: ${contact_name}, ${department_name}, ${ward_name}
-- Defect: ${defect_category} (Severity ${severity}/4)
-- Technical Assessment: ${technical_summary}
-- Citizen Note: ${user_note || 'None'}
-- Coordinates: ${lat}° N, ${lng}° E
-- SLA Requirement: ${severity === 4 ? '14' : '30'} Days
-
-Respond in JSON with:
-{
-  "subject": string,
-  "body": string
-}
-    `;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { responseMimeType: 'application/json' },
+    return NextResponse.json({
+      subject,
+      body: emailBody,
+      provider: 'fallback_template',
     });
-
-    const parsed = JSON.parse(response.text || '{}');
-    return NextResponse.json(parsed);
   } catch (err: unknown) {
     console.error('Draft email API error:', err);
     return NextResponse.json({
       subject: 'Formal Infrastructure Grievance Notice',
       body: 'Standard municipal notice for infrastructure inspection and repair.',
-      is_mock_fallback: true,
+      provider: 'fallback_template',
     });
   }
 }
