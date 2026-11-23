@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #F6F4EF;
+    color: #26302A;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+    letter-spacing: -0.025em;
+  }
+}
+
+/* Custom Leaflet Map Container */
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  border-radius: 1rem;
+  z-index: 10;
+  background-color: #EDE9E0;
+}
+
+/* Leaflet Popups in Stone & Sage */
+.leaflet-popup-content-wrapper {
+  background: #F6F4EF !important;
+  color: #26302A !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 10px 25px -5px rgba(38, 48, 42, 0.15) !important;
+  border: 1px solid #E4E0D6 !important;
+}
+
+.leaflet-popup-tip {
+  background: #F6F4EF !important;
+}
+
+/* Clean Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #EDE9E0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #A3AD9C;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #5E6F63;
+}

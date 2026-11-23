@@ -1,21 +1,26 @@
-import { createBrowserClient } from '@supabase/ssr';
+import { createClient as createSupabaseClient, SupabaseClient } from '@supabase/supabase-js';
 
-export function createClient() {
-  let url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Read environment variables safely for Vite
+const supabaseUrl: string =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) ||
+  'https://ncvuwbmetnazxbuorvjo.supabase.co';
 
-  if (url) {
-    url = url.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
+const supabaseAnonKey: string =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) ||
+  'sb_publishable_S67-y2C7A2axeMiNzKnCug_SZX2ezmH';
+
+let clientInstance: SupabaseClient | null = null;
+
+export function createClient(): SupabaseClient {
+  if (!clientInstance) {
+    clientInstance = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
   }
-
-  const validUrl =
-    url && url.startsWith('http')
-      ? url
-      : 'https://placeholder-piams.supabase.co';
-  const validKey =
-    anonKey && anonKey !== 'your-supabase-anon-key'
-      ? anonKey
-      : 'placeholder-anon-key';
-
-  return createBrowserClient(validUrl, validKey);
+  return clientInstance;
 }
+
+export const supabase = createClient();

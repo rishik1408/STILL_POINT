@@ -13,7 +13,7 @@ import {
 import { Issue, Asset } from '@/types';
 import { SeverityBadge, StatusBadge, Button } from '@/components/ui/shared';
 import { formatDate, formatDateTime, getSLAStatus } from '@/lib/utils';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 
 interface AssetDetailSlideOverProps {
   isOpen: boolean;
@@ -199,7 +199,7 @@ export function AssetDetailSlideOver({
 
         {/* Footer Actions */}
         <div className="p-4 border-t border-[#E4E0D6] bg-white/70 backdrop-blur-sm flex items-center justify-between gap-3">
-          <Link href="/user/report" className="flex-1">
+          <Link to="/user/report" className="flex-1">
             <Button variant="outline" className="w-full text-xs" size="sm">
               Report Nearby Defect
             </Button>

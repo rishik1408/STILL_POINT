@@ -1,11 +1,11 @@
 {
-  "name": "PIAMS",
-  "short_name": "PIAMS",
-  "description": "Public Infrastructure Asset Monitoring System — AI-powered civic infrastructure monitoring",
-  "start_url": "/login",
+  "name": "STILL POINT — Civic Infrastructure Intelligence",
+  "short_name": "STILL POINT",
+  "description": "Bengaluru civic infrastructure defect reporting, AI spatial triage, and BBMP municipal remediation.",
+  "start_url": "/",
   "display": "standalone",
-  "background_color": "#FAFBFC",
-  "theme_color": "#1B365D",
+  "background_color": "#F6F4EF",
+  "theme_color": "#26302A",
   "orientation": "portrait-primary",
   "icons": [
     {

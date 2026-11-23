@@ -267,14 +267,14 @@ interface SelectOption {
   label: string;
 }
 
-interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, 'children'> {
+interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
-  options: SelectOption[];
+  options?: SelectOption[];
   error?: string;
   placeholder?: string;
 }
 
-export function Select({ label, options, error, placeholder, className, id, ...props }: SelectProps) {
+export function Select({ label, options, children, error, placeholder, className, id, ...props }: SelectProps) {
   const selectId = id || label?.toLowerCase().replace(/\s+/g, '-');
   return (
     <div className="space-y-1.5">
@@ -286,18 +286,20 @@ export function Select({ label, options, error, placeholder, className, id, ...p
       <select
         id={selectId}
         className={cn(
-          'w-full rounded-xl border border-[#E4E0D6] bg-white/90 px-4 py-2.5 text-sm text-[#26302A] focus:border-[#C58A66] focus:ring-2 focus:ring-[#C58A66]/20 outline-none transition-all appearance-none',
+          'w-full rounded-xl border border-[#E4E0D6] bg-white/90 px-4 py-2.5 text-sm text-[#26302A] focus:border-[#C58A66] focus:ring-2 focus:ring-[#C58A66]/20 outline-none transition-all',
           error && 'border-[#A84835]',
           className
         )}
         {...props}
       >
         {placeholder && <option value="">{placeholder}</option>}
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
+        {options
+          ? options.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))
+          : children}
       </select>
       {error && <p className="text-xs text-[#A84835] mt-1">{error}</p>}
     </div>

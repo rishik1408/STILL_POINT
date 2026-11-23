@@ -117,6 +117,9 @@ export interface AIReportResult {
   confidence: number;
   technical_summary: string;
   user_note?: string;
+  description?: string;
+  suggested_action?: string;
+  repair_urgency?: string;
 }
 
 export interface AIAuditResult {

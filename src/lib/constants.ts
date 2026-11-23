@@ -77,6 +77,6 @@ export const SLA_CONFIG = {
   low: 30,      // severity 1
 } as const;
 
-// Map defaults (Mumbai center)
-export const MAP_DEFAULT_CENTER: [number, number] = [19.0760, 72.8777];
+// Map defaults (Bengaluru center)
+export const MAP_DEFAULT_CENTER: [number, number] = [12.9716, 77.5946];
 export const MAP_DEFAULT_ZOOM = 12;

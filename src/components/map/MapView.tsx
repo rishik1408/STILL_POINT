@@ -4,7 +4,8 @@ import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Asset, Issue, Authority } from '@/types';
-import { SEVERITY_CONFIG } from '@/lib/constants';
+import { SEVERITY_CONFIG, MAP_DEFAULT_CENTER } from '@/lib/constants';
+import { MOCK_AUTHORITIES } from '@/lib/mock-data';
 
 // Custom SVG marker factory for Issues based on severity
 function createIssueIcon(severity: number, status: string) {
@@ -104,7 +105,7 @@ export default function MapView({
   authorities = [],
   onSelectIssue,
   onSelectAsset,
-  center = [19.076, 72.8777],
+  center = MAP_DEFAULT_CENTER,
   zoom = 12,
 }: MapViewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -113,16 +114,27 @@ export default function MapView({
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    // Initialize Leaflet map instance
+    // Initialize Leaflet map instance centered on Bengaluru
     if (!mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current).setView(center, zoom);
+      const map = L.map(mapContainerRef.current, {
+        zoomControl: true,
+        scrollWheelZoom: true,
+      }).setView(center, zoom);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution:
           '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
       }).addTo(map);
 
       mapInstanceRef.current = map;
+    } else {
+      const map = mapInstanceRef.current;
+      const cur = map.getCenter();
+      // If current center is outside Bengaluru (>0.5 deg away), reset view to Bengaluru
+      if (Math.abs(cur.lat - center[0]) > 0.4 || Math.abs(cur.lng - center[1]) > 0.4) {
+        map.setView(center, zoom);
+      }
     }
 
     const map = mapInstanceRef.current;
@@ -134,8 +146,11 @@ export default function MapView({
       }
     });
 
-    // Draw municipal ward polygons
-    authorities.forEach((auth) => {
+    // Draw municipal ward polygons (Fallback to BBMP Bengaluru zones)
+    const activeAuthorities =
+      authorities && authorities.length > 0 ? authorities : MOCK_AUTHORITIES;
+
+    activeAuthorities.forEach((auth) => {
       const poly = auth.ward_polygon as { coordinates?: number[][][] };
       if (!poly?.coordinates?.[0]) return;
 
@@ -191,8 +206,8 @@ export default function MapView({
 
     // Draw Issue markers
     issues.forEach((issue) => {
-      const lat = issue.asset?.lat || 18.922;
-      const lng = issue.asset?.lng || 72.833;
+      const lat = issue.lat || issue.asset?.lat || 12.9716;
+      const lng = issue.lng || issue.asset?.lng || 77.5946;
 
       const marker = L.marker([lat, lng], {
         icon: createIssueIcon(issue.severity, issue.status),
@@ -221,7 +236,10 @@ export default function MapView({
 
     // Clean up on unmount
     return () => {
-      // Keep instance cached
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
     };
   }, [assets, issues, authorities, center, zoom, onSelectAsset, onSelectIssue]);
 
@@ -233,3 +251,5 @@ export default function MapView({
     />
   );
 }
+
+export { MapView };
