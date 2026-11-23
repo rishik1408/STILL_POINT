@@ -1,35 +1,41 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
   Filter,
   PlusCircle,
   MapPin,
-  Layers,
   Search,
-  AlertTriangle,
   RotateCcw,
+  Sparkles,
+  Layers,
 } from 'lucide-react';
 import { Button, Badge, Card, Spinner } from '@/components/ui/shared';
 import { AssetDetailSlideOver } from '@/components/map/AssetDetailSlideOver';
-import { MOCK_ASSETS, MOCK_ISSUES, MOCK_AUTHORITIES } from '@/lib/mock-data';
-import { Asset, Issue } from '@/types';
-import { DEFECT_CATEGORIES } from '@/lib/constants';
+import { fetchAssets, fetchIssues, fetchAuthorities } from '@/lib/data-service';
+import { Asset, Issue, Authority } from '@/types';
 
 // Dynamically import MapView with SSR disabled
 const DynamicMapView = dynamic(() => import('@/components/map/MapView'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full min-h-[500px] flex flex-col items-center justify-center bg-slate-100 rounded-2xl">
+    <div className="w-full h-full min-h-[500px] flex flex-col items-center justify-center bg-[#E4E0D6]/20 border border-[#E4E0D6] rounded-2xl">
       <Spinner size="lg" />
-      <p className="mt-3 text-xs font-semibold text-slate-500">Loading Geospatial Infrastructure Map...</p>
+      <p className="mt-3 text-xs font-mono uppercase tracking-widest text-[#5E6F63]">
+        Loading Geospatial Sanctuary Map...
+      </p>
     </div>
   ),
 });
 
 export default function UserMapPage() {
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [authorities, setAuthorities] = useState<Authority[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
   const [selectedAssetType, setSelectedAssetType] = useState<string>('all');
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
@@ -38,9 +44,36 @@ export default function UserMapPage() {
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [slideOverOpen, setSlideOverOpen] = useState(false);
 
+  useEffect(() => {
+    let isMounted = true;
+    async function loadMapData() {
+      try {
+        setLoading(true);
+        const [loadedAssets, loadedIssues, loadedAuths] = await Promise.all([
+          fetchAssets(),
+          fetchIssues(),
+          fetchAuthorities(),
+        ]);
+        if (isMounted) {
+          setAssets(loadedAssets);
+          setIssues(loadedIssues);
+          setAuthorities(loadedAuths);
+        }
+      } catch (err) {
+        console.error('Failed to load map data:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+    loadMapData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Filtered issues
   const filteredIssues = useMemo(() => {
-    return MOCK_ISSUES.filter((issue) => {
+    return issues.filter((issue) => {
       if (selectedSeverity !== 'all' && issue.severity.toString() !== selectedSeverity) {
         return false;
       }
@@ -59,11 +92,11 @@ export default function UserMapPage() {
       }
       return true;
     });
-  }, [selectedSeverity, selectedStatus, selectedAssetType, searchQuery]);
+  }, [issues, selectedSeverity, selectedStatus, selectedAssetType, searchQuery]);
 
   // Filtered assets
   const filteredAssets = useMemo(() => {
-    return MOCK_ASSETS.filter((asset) => {
+    return assets.filter((asset) => {
       if (selectedAssetType !== 'all' && asset.asset_type !== selectedAssetType) {
         return false;
       }
@@ -76,7 +109,7 @@ export default function UserMapPage() {
       }
       return true;
     });
-  }, [selectedAssetType, searchQuery]);
+  }, [assets, selectedAssetType, searchQuery]);
 
   const handleSelectIssue = (issue: Issue) => {
     setSelectedIssue(issue);
@@ -85,8 +118,7 @@ export default function UserMapPage() {
   };
 
   const handleSelectAsset = (asset: Asset) => {
-    // Find matching issue if exists
-    const matchingIssue = MOCK_ISSUES.find((i) => i.asset_id === asset.id);
+    const matchingIssue = issues.find((i) => i.asset_id === asset.id);
     setSelectedIssue(matchingIssue || null);
     setSelectedAsset(asset);
     setSlideOverOpen(true);
@@ -100,38 +132,45 @@ export default function UserMapPage() {
   };
 
   return (
-    <div className="h-full flex flex-col p-4 sm:p-6 max-w-7xl mx-auto space-y-4">
+    <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-5">
       {/* Top Controls Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-[#1B365D] tracking-tight">
-            Live Civic Infrastructure Map
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[#5E6F63] font-semibold">
+              Geospatial Intelligence
+            </span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#C58A66]" />
+            <span className="text-[10px] font-mono uppercase text-[#A3AD9C]">Live Field Mesh</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-serif font-bold text-[#26302A] tracking-tight">
+            Civic Infrastructure Map
           </h1>
-          <p className="text-xs text-slate-500">
-            Real-time public defect mapping, severity classification, and municipal ward routing.
+          <p className="text-xs text-[#5E6F63] mt-1 max-w-xl">
+            Real-time public defect mapping, severity classification, and municipal ward routing across verified corridors.
           </p>
         </div>
 
         <Link href="/user/report">
-          <Button size="sm" className="flex items-center gap-2 shadow-md">
-            <PlusCircle className="h-4 w-4" />
-            <span>Report New Defect</span>
+          <Button size="sm" className="flex items-center gap-2 bg-[#26302A] hover:bg-[#34423a] text-[#F6F4EF] shadow-sm">
+            <PlusCircle className="h-4 w-4 text-[#C58A66]" />
+            <span>Report Defect</span>
           </Button>
         </Link>
       </div>
 
       {/* Filter and Search Bar */}
-      <Card className="p-3 bg-white shadow-xs">
+      <div className="p-3 bg-white/70 backdrop-blur-sm rounded-2xl border border-[#E4E0D6] shadow-2xs">
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Search Box */}
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#5E6F63]" />
             <input
               type="text"
-              placeholder="Search roads, wards, or defect types..."
+              placeholder="Search corridors, wards, or defect taxonomy..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 text-slate-900 focus:bg-white focus:border-blue-500 outline-none transition"
+              className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-[#E4E0D6] bg-[#F6F4EF]/70 text-[#26302A] placeholder:text-[#A3AD9C] focus:bg-white focus:border-[#5E6F63] outline-none transition font-sans"
             />
           </div>
 
@@ -139,35 +178,35 @@ export default function UserMapPage() {
           <select
             value={selectedAssetType}
             onChange={(e) => setSelectedAssetType(e.target.value)}
-            className="py-1.5 px-3 rounded-xl border border-slate-200 text-xs bg-slate-50 text-slate-700 font-medium outline-none cursor-pointer"
+            className="py-2 px-3 rounded-xl border border-[#E4E0D6] text-xs bg-[#F6F4EF]/70 text-[#26302A] font-medium outline-none cursor-pointer hover:border-[#A3AD9C] transition"
           >
-            <option value="all">All Assets (Roads/Bridges)</option>
-            <option value="road">🛣️ Roads Only</option>
-            <option value="bus_stop">🚏 Bus Stops Only</option>
-            <option value="footpath">🚶 Footpaths Only</option>
-            <option value="overbridge">🌉 Overbridges Only</option>
+            <option value="all">All Asset Classes</option>
+            <option value="road">🛣️ Roads & Expressways</option>
+            <option value="bus_stop">🚏 Bus Transit Shelters</option>
+            <option value="footpath">🚶 Pedestrian Corridors</option>
+            <option value="overbridge">🌉 Bridges & Flyovers</option>
           </select>
 
           {/* Severity Filter */}
           <select
             value={selectedSeverity}
             onChange={(e) => setSelectedSeverity(e.target.value)}
-            className="py-1.5 px-3 rounded-xl border border-slate-200 text-xs bg-slate-50 text-slate-700 font-medium outline-none cursor-pointer"
+            className="py-2 px-3 rounded-xl border border-[#E4E0D6] text-xs bg-[#F6F4EF]/70 text-[#26302A] font-medium outline-none cursor-pointer hover:border-[#A3AD9C] transition"
           >
             <option value="all">All Severities (1–4)</option>
-            <option value="4">S4: Critical Hazard</option>
-            <option value="3">S3: High Severity</option>
+            <option value="4">S4: Critical Structural</option>
+            <option value="3">S3: High Deterioration</option>
             <option value="2">S2: Medium Severity</option>
-            <option value="1">S1: Low Severity</option>
+            <option value="1">S1: Low / Minor Wear</option>
           </select>
 
           {/* Status Filter */}
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="py-1.5 px-3 rounded-xl border border-slate-200 text-xs bg-slate-50 text-slate-700 font-medium outline-none cursor-pointer"
+            className="py-2 px-3 rounded-xl border border-[#E4E0D6] text-xs bg-[#F6F4EF]/70 text-[#26302A] font-medium outline-none cursor-pointer hover:border-[#A3AD9C] transition"
           >
-            <option value="all">All Statuses</option>
+            <option value="all">All Lifecycle States</option>
             <option value="Reported">Reported</option>
             <option value="In Progress">In Progress</option>
             <option value="Repair Claimed">Repair Claimed</option>
@@ -178,7 +217,7 @@ export default function UserMapPage() {
           {(selectedAssetType !== 'all' || selectedSeverity !== 'all' || selectedStatus !== 'all' || searchQuery) && (
             <button
               onClick={resetFilters}
-              className="p-1.5 text-xs text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-100 flex items-center gap-1 transition"
+              className="p-2 text-xs text-[#5E6F63] hover:text-[#26302A] rounded-xl hover:bg-[#E4E0D6]/50 flex items-center gap-1 transition"
               title="Reset Filters"
             >
               <RotateCcw className="h-3.5 w-3.5" />
@@ -186,38 +225,51 @@ export default function UserMapPage() {
             </button>
           )}
         </div>
-      </Card>
+      </div>
 
-      {/* Map Stats & Legend Pill */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs">
-        <div className="flex items-center gap-3 text-slate-600">
-          <span>Showing <strong>{filteredIssues.length}</strong> active issues & <strong>{filteredAssets.length}</strong> monitored assets</span>
-          <span className="hidden sm:inline text-slate-300">•</span>
-          <span className="hidden sm:inline text-blue-600">Blue dashed lines = Municipal Ward Polygons</span>
+      {/* Map Stats & Legend */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs">
+        <div className="flex items-center gap-3 text-[#5E6F63]">
+          <span>
+            Displaying <strong className="text-[#26302A] font-mono">{filteredIssues.length}</strong> active tickets &{' '}
+            <strong className="text-[#26302A] font-mono">{filteredAssets.length}</strong> monitored assets
+          </span>
+          <span className="hidden sm:inline text-[#E4E0D6]">|</span>
+          <span className="hidden sm:inline text-[#5E6F63] font-mono text-[11px]">
+            Dashed contours = Municipal Ward Polygons
+          </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
-            <span className="h-2.5 w-2.5 rounded-full bg-red-500 inline-block" /> S4 Critical
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5 text-[11px] font-medium text-[#26302A]">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#A84835] inline-block shadow-2xs" /> S4 Critical
           </span>
-          <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
-            <span className="h-2.5 w-2.5 rounded-full bg-orange-500 inline-block" /> S3 High
+          <span className="flex items-center gap-1.5 text-[11px] font-medium text-[#26302A]">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#B85D36] inline-block shadow-2xs" /> S3 High
           </span>
-          <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
-            <span className="h-2.5 w-2.5 rounded-full bg-amber-500 inline-block" /> S2 Med
+          <span className="flex items-center gap-1.5 text-[11px] font-medium text-[#26302A]">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#C58A66] inline-block shadow-2xs" /> S2 Med
           </span>
-          <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-500">
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Verified Closed
+          <span className="flex items-center gap-1.5 text-[11px] font-medium text-[#26302A]">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#5E6F63] inline-block shadow-2xs" /> Verified Closed
           </span>
         </div>
       </div>
 
       {/* Leaflet Map Container */}
-      <div className="flex-1 min-h-[550px] rounded-2xl overflow-hidden border border-slate-200 shadow-sm relative">
+      <div className="flex-1 min-h-[550px] rounded-2xl overflow-hidden border border-[#E4E0D6] shadow-sm relative bg-[#E4E0D6]/20">
+        {loading ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#F6F4EF]/80 backdrop-blur-xs z-10">
+            <Spinner size="lg" />
+            <p className="mt-3 text-xs font-mono uppercase tracking-widest text-[#5E6F63]">
+              Synchronizing GIS Layer...
+            </p>
+          </div>
+        ) : null}
         <DynamicMapView
           assets={filteredAssets}
           issues={filteredIssues}
-          authorities={MOCK_AUTHORITIES}
+          authorities={authorities}
           selectedIssueId={selectedIssue?.id}
           onSelectIssue={handleSelectIssue}
           onSelectAsset={handleSelectAsset}

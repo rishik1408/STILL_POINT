@@ -64,6 +64,9 @@ export interface Issue {
   escalation_count: number;
   created_at: string;
   updated_at: string;
+  geom?: unknown;
+  lat?: number;
+  lng?: number;
   // Joined fields
   asset?: Asset;
   authority?: Authority;

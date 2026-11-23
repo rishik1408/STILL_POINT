@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   CheckCheck,
@@ -8,22 +8,22 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  HelpCircle,
   Sparkles,
   Bot,
   ArrowRight,
-  ShieldAlert,
-  Send,
+  ShieldCheck,
   Building2,
 } from 'lucide-react';
-import { Button, Card, Badge, SeverityBadge, StatusBadge, Spinner } from '@/components/ui/shared';
-import { MOCK_ISSUES } from '@/lib/mock-data';
+import { Button, Card, Badge, SeverityBadge, StatusBadge, Spinner, EmptyState } from '@/components/ui/shared';
+import { fetchIssues, updateIssueStatus } from '@/lib/data-service';
 import { Issue, AuditVerdict } from '@/types';
 import { formatDate, getSLAStatus } from '@/lib/utils';
+import { StillPointLogo } from '@/components/ui/StillPointLogo';
 
 export default function UserAuditorPage() {
   const [activeTab, setActiveTab] = useState<'auditor' | 'followup'>('auditor');
-  const [issues, setIssues] = useState<Issue[]>(MOCK_ISSUES);
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [loading, setLoading] = useState(true);
   const [auditingIssueId, setAuditingIssueId] = useState<string | null>(null);
   const [auditResults, setAuditResults] = useState<
     Record<
@@ -35,15 +35,28 @@ export default function UserAuditorPage() {
         requires_human_review?: boolean;
       }
     >
-  >({
-    // Pre-seed an audit result for closed issue #5
-    'c5000000-0000-0000-0000-000000000005': {
-      verdict: 'Resolved',
-      confidence: 0.98,
-      reasoning: 'Paired image comparison verifies complete structural remediation. Both LED fixtures restored and illumination certified.',
-      requires_human_review: false,
-    },
-  });
+  >({});
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      try {
+        setLoading(true);
+        const data = await fetchIssues();
+        if (isMounted) {
+          setIssues(data);
+        }
+      } catch (err) {
+        console.error('Failed to load auditor issues:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Filter issues for "Pending Verification" (Repair Claimed)
   const pendingAuditIssues = issues.filter(
@@ -82,8 +95,16 @@ export default function UserAuditorPage() {
         [issue.id]: data,
       }));
 
-      // If resolved with high confidence, update local state to 'Verified Closed'
+      // If resolved with high confidence, update database to 'Verified Closed'
       if (data.verdict === 'Resolved' && !data.requires_human_review) {
+        await updateIssueStatus(
+          issue.id,
+          'Verified Closed',
+          data.reasoning || 'Automated paired visual inspection verified structural remediation.',
+          data.verdict,
+          data.confidence
+        );
+
         setIssues((prev) =>
           prev.map((item) =>
             item.id === issue.id ? { ...item, status: 'Verified Closed' } : item
@@ -98,32 +119,43 @@ export default function UserAuditorPage() {
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-[#1B365D] tracking-tight">
-            AI Auditor & Follow-Up Engine
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[#5E6F63] font-semibold">
+              Quality Assurance
+            </span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#C58A66]" />
+            <span className="text-[10px] font-mono uppercase text-[#A3AD9C]">Automated Inspection</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-serif font-bold text-[#26302A] tracking-tight">
+            AI Resolution Auditor & SLA Engine
           </h1>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-[#5E6F63] mt-1 max-w-xl">
             Objective before-and-after photo resolution audits and automated SLA grievance escalation tracking.
           </p>
         </div>
 
         {/* Tab Toggle */}
-        <div className="flex rounded-xl bg-slate-200/80 p-1 border border-slate-300/50">
+        <div className="flex rounded-2xl bg-[#E4E0D6]/60 p-1 border border-[#E4E0D6]">
           <button
             onClick={() => setActiveTab('auditor')}
-            className={`py-1.5 px-3 rounded-lg text-xs font-bold transition cursor-pointer ${
-              activeTab === 'auditor' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            className={`py-2 px-3.5 rounded-xl text-xs font-serif font-bold transition cursor-pointer ${
+              activeTab === 'auditor'
+                ? 'bg-[#26302A] text-[#F6F4EF] shadow-2xs'
+                : 'text-[#5E6F63] hover:text-[#26302A]'
             }`}
           >
             Resolution Auditor ({pendingAuditIssues.length})
           </button>
           <button
             onClick={() => setActiveTab('followup')}
-            className={`py-1.5 px-3 rounded-lg text-xs font-bold transition cursor-pointer ${
-              activeTab === 'followup' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+            className={`py-2 px-3.5 rounded-xl text-xs font-serif font-bold transition cursor-pointer ${
+              activeTab === 'followup'
+                ? 'bg-[#26302A] text-[#F6F4EF] shadow-2xs'
+                : 'text-[#5E6F63] hover:text-[#26302A]'
             }`}
           >
             SLA Follow-Up Tracker ({trackedIssues.length})
@@ -131,206 +163,249 @@ export default function UserAuditorPage() {
         </div>
       </div>
 
+      {loading ? (
+        <div className="py-24 text-center space-y-3">
+          <Spinner size="lg" />
+          <p className="text-xs font-mono uppercase tracking-widest text-[#5E6F63]">
+            Loading Verification Queues...
+          </p>
+        </div>
+      ) : null}
+
       {/* TAB 1: AI AUDITOR */}
-      {activeTab === 'auditor' && (
+      {!loading && activeTab === 'auditor' && (
         <div className="space-y-4">
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 text-xs text-blue-900 flex items-start gap-3">
-            <Sparkles className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/70 backdrop-blur-sm border border-[#E4E0D6] text-xs text-[#26302A] flex items-start gap-3.5 shadow-2xs">
+            <div className="p-2 rounded-xl bg-[#5E6F63]/10 text-[#5E6F63] shrink-0">
+              <Sparkles className="h-4 w-4" />
+            </div>
             <div>
-              <p className="font-bold">Multimodal Before-and-After Verification Rubric</p>
-              <p className="text-blue-700 mt-0.5">
-                Repairs marked by crews as &ldquo;Repair Claimed&rdquo; must pass automated paired visual scrutiny. Confidence scores &lt; 0.85 or &ldquo;Partially Patched&rdquo; flags route to Human Review; &ldquo;Unresolved&rdquo; re-opens the ticket with escalation.
+              <p className="font-serif font-bold text-sm text-[#26302A]">Multimodal Visual Remediation Rubric</p>
+              <p className="text-[#5E6F63] mt-0.5 leading-relaxed">
+                Repairs claimed by municipal crews undergo automated paired image comparison. Confidence &ge; 85% with complete restoration transitions to <strong>Verified Closed</strong>; sub-threshold or partial patches are flagged for Senior Inspector review.
               </p>
             </div>
           </div>
 
-          <div className="space-y-4">
-            {pendingAuditIssues.map((issue) => {
-              const audit = auditResults[issue.id];
-              const isRunning = auditingIssueId === issue.id;
-              const beforePhoto = issue.media?.find((m) => m.stage === 'before')?.file_url;
-              const afterPhoto = issue.media?.find((m) => m.stage === 'after')?.file_url;
+          {pendingAuditIssues.length === 0 ? (
+            <Card className="p-12 text-center bg-white/70 backdrop-blur-sm border border-[#E4E0D6] shadow-sm space-y-3">
+              <div className="mx-auto w-14 h-14 flex items-center justify-center rounded-2xl bg-[#F6F4EF] border border-[#E4E0D6]">
+                <CheckCircle2 className="h-7 w-7 text-[#5E6F63]" />
+              </div>
+              <h3 className="font-serif font-bold text-base text-[#26302A]">No Audits Awaiting Verification</h3>
+              <p className="text-xs text-[#5E6F63] max-w-sm mx-auto">
+                No tickets currently reside in &ldquo;Repair Claimed&rdquo; state. Once municipal crews upload proof of repair, they populate this queue.
+              </p>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {pendingAuditIssues.map((issue) => {
+                const audit = auditResults[issue.id];
+                const isRunning = auditingIssueId === issue.id;
+                const beforePhoto = issue.media?.find((m) => m.stage === 'before')?.file_url;
+                const afterPhoto = issue.media?.find((m) => m.stage === 'after')?.file_url;
 
-              return (
-                <Card key={issue.id} className="p-5 sm:p-6 space-y-5 border border-slate-200 shadow-xs">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-bold text-slate-400">
-                          #{issue.id.slice(0, 8)}
-                        </span>
-                        <SeverityBadge severity={issue.severity} />
-                        <StatusBadge status={issue.status} />
-                      </div>
-                      <h3 className="text-base font-bold text-slate-900">
-                        {issue.category} — {issue.asset?.name}
-                      </h3>
-                    </div>
-
-                    <div className="text-right">
-                      <span className="text-[11px] text-slate-500 block">Reported Date:</span>
-                      <strong className="text-xs text-slate-800">{formatDate(issue.created_at)}</strong>
-                    </div>
-                  </div>
-
-                  {/* Paired Photo Comparison Display */}
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    {/* Before Photo */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px]">
-                          1. Original Defect (Before)
-                        </span>
-                        <span className="text-slate-400 text-[10px]">Citizen Capture</span>
-                      </div>
-                      <div className="relative aspect-video rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
-                        {beforePhoto ? (
-                          <img src={beforePhoto} alt="Before" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="h-full flex items-center justify-center text-xs text-slate-400">No before photo</div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* After Photo */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-emerald-700 uppercase tracking-wider text-[11px]">
-                          2. Completed Fix (After)
-                        </span>
-                        <span className="text-emerald-600 text-[10px] font-semibold">Field Crew Proof</span>
-                      </div>
-                      <div className="relative aspect-video rounded-xl overflow-hidden bg-slate-100 border border-emerald-200 ring-2 ring-emerald-500/10">
-                        {afterPhoto ? (
-                          <img src={afterPhoto} alt="After" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="h-full flex items-center justify-center text-xs text-slate-400">Awaiting after photo</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Audit Result Display */}
-                  {audit && (
-                    <div className={`p-4 rounded-xl border space-y-2 ${
-                      audit.verdict === 'Resolved'
-                        ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
-                        : audit.verdict === 'Partially Patched'
-                        ? 'bg-amber-50/70 border-amber-200 text-amber-950'
-                        : 'bg-red-50/70 border-red-200 text-red-950'
-                    }`}>
-                      <div className="flex items-center justify-between">
+                return (
+                  <Card key={issue.id} className="p-5 sm:p-6 space-y-5 border border-[#E4E0D6] bg-white/80 backdrop-blur-xs shadow-2xs">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-[#E4E0D6] pb-3">
+                      <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          {audit.verdict === 'Resolved' && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
-                          {audit.verdict === 'Partially Patched' && <AlertTriangle className="h-4 w-4 text-amber-600" />}
-                          {audit.verdict === 'Unresolved' && <XCircle className="h-4 w-4 text-red-600" />}
-                          <strong className="text-sm font-bold">
-                            AI Verdict: {audit.verdict}
-                          </strong>
+                          <span className="text-[10px] font-mono font-bold text-[#A3AD9C]">
+                            #{issue.id.slice(0, 8)}
+                          </span>
+                          <SeverityBadge severity={issue.severity} />
+                          <StatusBadge status={issue.status} />
                         </div>
-                        <span className="text-xs font-mono font-bold">
-                          Confidence: {((audit.confidence || 0.95) * 100).toFixed(0)}%
-                        </span>
+                        <h3 className="text-base font-serif font-bold text-[#26302A]">
+                          {issue.category} — {issue.asset?.name || 'Corridor Asset'}
+                        </h3>
                       </div>
 
-                      <p className="text-xs leading-relaxed">{audit.reasoning}</p>
+                      <div className="text-right">
+                        <span className="text-[11px] font-mono text-[#5E6F63] block">Intake Date:</span>
+                        <strong className="text-xs font-mono text-[#26302A]">{formatDate(issue.created_at)}</strong>
+                      </div>
+                    </div>
 
-                      {audit.requires_human_review && (
-                        <div className="pt-2 border-t border-amber-200/60 text-xs text-amber-900 font-semibold flex items-center gap-1.5">
-                          <AlertTriangle className="h-3.5 w-3.5" />
-                          <span>Flagged: Sub-threshold confidence (&lt;85%) routed to Senior Engineer Review Queue</span>
+                    {/* Paired Photo Comparison */}
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      {/* Before Photo */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-mono font-bold text-[#26302A] uppercase tracking-wider text-[10px]">
+                            1. Citizen Capture (Before)
+                          </span>
+                          <span className="text-[#A3AD9C] text-[10px] font-mono">Original Defect</span>
                         </div>
+                        <div className="relative aspect-video rounded-xl overflow-hidden bg-[#F6F4EF] border border-[#E4E0D6]">
+                          {beforePhoto ? (
+                            <img src={beforePhoto} alt="Before remediation" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="h-full flex items-center justify-center text-xs text-[#A3AD9C] font-mono">
+                              No before image attached
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* After Photo */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-mono font-bold text-[#5E6F63] uppercase tracking-wider text-[10px]">
+                            2. Ward Remediation (After)
+                          </span>
+                          <span className="text-[#5E6F63] text-[10px] font-mono font-semibold">Crew Evidence</span>
+                        </div>
+                        <div className="relative aspect-video rounded-xl overflow-hidden bg-[#F6F4EF] border border-[#5E6F63]/30 ring-2 ring-[#5E6F63]/10">
+                          {afterPhoto ? (
+                            <img src={afterPhoto} alt="After remediation" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="h-full flex items-center justify-center text-xs text-[#A3AD9C] font-mono">
+                              Awaiting official remediation photo
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Audit Result Display */}
+                    {audit && (
+                      <div
+                        className={`p-4 rounded-xl border space-y-2 ${
+                          audit.verdict === 'Resolved'
+                            ? 'bg-[#5E6F63]/10 border-[#5E6F63]/30 text-[#26302A]'
+                            : audit.verdict === 'Partially Patched'
+                            ? 'bg-[#C58A66]/15 border-[#C58A66]/40 text-[#26302A]'
+                            : 'bg-[#A84835]/15 border-[#A84835]/40 text-[#26302A]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {audit.verdict === 'Resolved' && <CheckCircle2 className="h-4 w-4 text-[#5E6F63]" />}
+                            {audit.verdict === 'Partially Patched' && <AlertTriangle className="h-4 w-4 text-[#C58A66]" />}
+                            {audit.verdict === 'Unresolved' && <XCircle className="h-4 w-4 text-[#A84835]" />}
+                            <strong className="text-sm font-serif font-bold">
+                              AI Verdict: {audit.verdict}
+                            </strong>
+                          </div>
+                          <span className="text-xs font-mono font-bold text-[#5E6F63]">
+                            Confidence: {((audit.confidence || 0.95) * 100).toFixed(0)}%
+                          </span>
+                        </div>
+
+                        <p className="text-xs leading-relaxed font-sans">{audit.reasoning}</p>
+
+                        {audit.requires_human_review && (
+                          <div className="pt-2 border-t border-[#E4E0D6] text-xs text-[#C58A66] font-semibold flex items-center gap-1.5 font-mono">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            <span>Flagged: Sub-threshold confidence (&lt;85%) routed to Senior Engineer Review Desk</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Trigger Action */}
+                    <div className="flex items-center justify-between pt-2">
+                      <span className="text-xs text-[#5E6F63]">
+                        Authority: <strong className="text-[#26302A]">{issue.authority?.ward_name || 'Central Ward'}</strong>
+                      </span>
+
+                      {issue.status === 'Repair Claimed' && !audit && (
+                        <Button
+                          onClick={() => triggerAudit(issue)}
+                          loading={isRunning}
+                          size="sm"
+                          className="flex items-center gap-2 bg-[#26302A] text-[#F6F4EF] hover:bg-[#34423a]"
+                        >
+                          <Bot className="h-4 w-4 text-[#C58A66]" />
+                          <span>Run Paired AI Audit</span>
+                        </Button>
+                      )}
+
+                      {issue.status === 'Verified Closed' && (
+                        <Badge variant="emerald" size="md">
+                          <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                          Verified Closed & Sealed
+                        </Badge>
                       )}
                     </div>
-                  )}
-
-                  {/* Trigger Action */}
-                  <div className="flex items-center justify-between pt-2">
-                    <span className="text-xs text-slate-500">
-                      Mapped Ward: <strong>{issue.authority?.ward_name}</strong>
-                    </span>
-
-                    {issue.status === 'Repair Claimed' && !audit && (
-                      <Button
-                        onClick={() => triggerAudit(issue)}
-                        loading={isRunning}
-                        size="sm"
-                        className="flex items-center gap-2"
-                      >
-                        <Bot className="h-4 w-4" />
-                        <span>Run Paired AI Audit</span>
-                      </Button>
-                    )}
-
-                    {issue.status === 'Verified Closed' && (
-                      <Badge variant="emerald" size="md">
-                        <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                        Verified & Closed
-                      </Badge>
-                    )}
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
       {/* TAB 2: SLA FOLLOW-UP TRACKER */}
-      {activeTab === 'followup' && (
+      {!loading && activeTab === 'followup' && (
         <div className="space-y-4">
-          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-3">
-            <Clock className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/70 backdrop-blur-sm border border-[#E4E0D6] text-xs text-[#26302A] flex items-start gap-3.5 shadow-2xs">
+            <div className="p-2 rounded-xl bg-[#C58A66]/15 text-[#C58A66] shrink-0">
+              <Clock className="h-4 w-4" />
+            </div>
             <div>
-              <p className="font-bold">Automated Follow-Up & Escalation Engine</p>
-              <p className="text-amber-800 mt-0.5">
-                Every ticket is bound to a strict municipal Service Level Agreement (SLA): <strong>14 days for Critical/High (S3/S4)</strong> and <strong>30 days for Medium/Low (S1/S2)</strong>. Tickets exceeding deadlines auto-escalate with weekly executive briefs sent to the Municipal Commissioner.
+              <p className="font-serif font-bold text-sm text-[#26302A]">Municipal Resolution SLA Tracker</p>
+              <p className="text-[#5E6F63] mt-0.5 leading-relaxed">
+                Every ticket is bound to a strict municipal Service Level Agreement (SLA): <strong>14 days for Critical / High (S3/S4)</strong> and <strong>30 days for Medium / Low (S1/S2)</strong>. Tickets exceeding deadlines auto-escalate with weekly executive briefs sent to the Municipal Commissioner.
               </p>
             </div>
           </div>
 
-          <div className="space-y-3">
-            {trackedIssues.map((issue) => {
-              const slaInfo = getSLAStatus(issue.sla_due_at);
+          {trackedIssues.length === 0 ? (
+            <Card className="p-12 text-center bg-white/70 backdrop-blur-sm border border-[#E4E0D6] shadow-sm space-y-3">
+              <div className="mx-auto w-14 h-14 flex items-center justify-center rounded-2xl bg-[#F6F4EF] border border-[#E4E0D6]">
+                <ShieldCheck className="h-7 w-7 text-[#5E6F63]" />
+              </div>
+              <h3 className="font-serif font-bold text-base text-[#26302A]">No Active SLA Grievances</h3>
+              <p className="text-xs text-[#5E6F63] max-w-sm mx-auto">
+                All reported tickets have been remediated or verified closed.
+              </p>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {trackedIssues.map((issue) => {
+                const slaInfo = getSLAStatus(issue.sla_due_at);
 
-              return (
-                <Card key={issue.id} className="p-5 border border-slate-200 shadow-xs">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-bold text-slate-400">
-                          #{issue.id.slice(0, 8)}
-                        </span>
-                        <SeverityBadge severity={issue.severity} />
-                        <StatusBadge status={issue.status} />
-                        {issue.escalation_count > 0 && (
-                          <Badge variant="red" size="sm">
-                            Escalated ×{issue.escalation_count}
-                          </Badge>
-                        )}
+                return (
+                  <Card key={issue.id} className="p-5 border border-[#E4E0D6] bg-white/80 backdrop-blur-xs shadow-2xs">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono font-bold text-[#A3AD9C]">
+                            #{issue.id.slice(0, 8)}
+                          </span>
+                          <SeverityBadge severity={issue.severity} />
+                          <StatusBadge status={issue.status} />
+                          {issue.escalation_count > 0 && (
+                            <Badge variant="red" size="sm">
+                              Escalated ×{issue.escalation_count}
+                            </Badge>
+                          )}
+                        </div>
+
+                        <h3 className="text-sm sm:text-base font-serif font-bold text-[#26302A]">
+                          {issue.category} — {issue.asset?.name || 'Corridor Asset'}
+                        </h3>
+
+                        <p className="text-xs text-[#5E6F63]">
+                          Assigned: <strong className="text-[#26302A]">{issue.authority?.contact_name || 'Ward Engineer'}</strong> ({issue.authority?.ward_name || 'Jurisdiction'})
+                        </p>
                       </div>
 
-                      <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                        {issue.category} — {issue.asset?.name}
-                      </h3>
-
-                      <p className="text-xs text-slate-500">
-                        Assigned: <strong>{issue.authority?.contact_name}</strong> ({issue.authority?.ward_name})
-                      </p>
+                      {/* SLA countdown badge */}
+                      <div className="text-right">
+                        <span className="text-[10px] font-mono uppercase text-[#A3AD9C] block">SLA Expiry Target</span>
+                        <strong className={`text-xs font-mono ${slaInfo.isBreached ? 'text-[#A84835] font-bold' : 'text-[#26302A]'}`}>
+                          {formatDate(issue.sla_due_at || '')} ({slaInfo.label})
+                        </strong>
+                      </div>
                     </div>
-
-                    {/* SLA countdown badge */}
-                    <div className="text-right">
-                      <span className="text-[11px] text-slate-400 block">SLA Expiry Target:</span>
-                      <strong className={`text-xs ${slaInfo.isBreached ? 'text-red-600 font-bold' : 'text-slate-800'}`}>
-                        {formatDate(issue.sla_due_at || '')} ({slaInfo.label})
-                      </strong>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-client';
 import { Profile, UserRole } from '@/types';
-import { MOCK_AUTHORITIES } from '@/lib/mock-data';
 
 export interface AuthState {
   user: { id: string; email?: string } | null;

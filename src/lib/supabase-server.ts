@@ -4,8 +4,12 @@ import { cookies } from 'next/headers';
 export async function createServerSupabaseClient() {
   const cookieStore = await cookies();
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  let url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (url) {
+    url = url.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
+  }
 
   const validUrl =
     url && url.startsWith('http')
