@@ -16,6 +16,20 @@ const GROQ_API_KEY =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GROQ_API_KEY) ||
   '';
 
+/**
+ * Optimizes image URLs (e.g. Unsplash) for vision models to prevent rate-limiting TPM spikes
+ */
+function optimizeImageUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  if (url.includes('images.unsplash.com')) {
+    if (url.includes('w=')) {
+      return url.replace(/w=\d+/, 'w=600');
+    }
+    return `${url}&w=600`;
+  }
+  return url;
+}
+
 export interface DefectAnalysisInput {
   imageFile?: File;
   imageBase64?: string;
@@ -28,17 +42,29 @@ export interface DefectAnalysisInput {
 /**
  * Analyzes infrastructure defect photo using:
  * 1. Secure Render API proxy (if VITE_RENDER_API_URL is configured)
- * 2. Direct Groq API client call (if VITE_GROQ_API_KEY is configured)
+ * 2. Direct Groq API client call with multimodal vision (if VITE_GROQ_API_KEY is configured)
  * 3. High-precision civil engineering heuristics (offline / zero-latency fallback)
  */
 export async function analyzeDefectPhoto(input: DefectAnalysisInput): Promise<AIReportResult> {
-  const { imageFile, imageBase64, lat, lng, userNotes = '' } = input;
+  const { imageFile, imageBase64, imagePreview, lat, lng, userNotes = '' } = input;
+
+  // Resolve image payload for multimodal vision (base64 or remote URL)
+  let imageUrl: string | undefined = undefined;
+  if (imageBase64 && imageBase64.startsWith('data:image/')) {
+    imageUrl = imageBase64;
+  } else if (imagePreview) {
+    if (imagePreview.startsWith('http://') || imagePreview.startsWith('https://')) {
+      imageUrl = optimizeImageUrl(imagePreview);
+    } else if (imagePreview.startsWith('data:image/')) {
+      imageUrl = imagePreview;
+    }
+  }
 
   // 1. Attempt secure Render backend if configured
   if (RENDER_API_URL) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       const response = await fetch(`${RENDER_API_URL.replace(/\/$/, '')}/api/ai/triage`, {
         method: 'POST',
@@ -50,6 +76,8 @@ export async function analyzeDefectPhoto(input: DefectAnalysisInput): Promise<AI
           lat,
           lng,
           userNotes,
+          imageBase64: imageUrl?.startsWith('data:image/') ? imageUrl : undefined,
+          imageUrl: imageUrl?.startsWith('http') ? imageUrl : undefined,
           imageType: imageFile?.type || 'image/jpeg',
         }),
       });
@@ -67,11 +95,25 @@ export async function analyzeDefectPhoto(input: DefectAnalysisInput): Promise<AI
     }
   }
 
-  // 2. Attempt direct Groq API if client key is available
+  // 2. Attempt direct Groq API (Qwen 3.8 27B Multimodal Vision)
   if (GROQ_API_KEY && GROQ_API_KEY.startsWith('gsk_')) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+        {
+          type: 'text',
+          text: `Civic defect report submitted in Bengaluru at GPS Coordinates: Lat ${lat ?? 12.9716}, Lng ${lng ?? 77.5946} (BBMP Municipal Jurisdiction). User notes: "${userNotes || (imageFile ? imageFile.name : 'Municipal defect inspection')}". Inspect the photo visually and provide a detailed civil engineering diagnostic report.`,
+        },
+      ];
+
+      if (imageUrl) {
+        userContent.push({
+          type: 'image_url',
+          image_url: { url: imageUrl },
+        });
+      }
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -81,11 +123,11 @@ export async function analyzeDefectPhoto(input: DefectAnalysisInput): Promise<AI
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model: 'qwen/qwen3.8-27b',
           messages: [
             {
               role: 'system',
-              content: `You are an expert civil engineering infrastructure inspector for STILL POINT. Analyze the reported civic defect and respond ONLY with a valid JSON object matching this schema:
+              content: `You are an expert civil engineering infrastructure inspector for STILL POINT (Bengaluru BBMP jurisdiction). Analyze the reported civic defect and respond ONLY with a valid JSON object matching this schema:
 {
   "defect_category": "Pothole" | "Broken Footpath Slab" | "Damaged Bus Shelter" | "Missing Railing" | "Lighting Failure" | "Drainage Blockage",
   "severity": 1 | 2 | 3 | 4,
@@ -93,15 +135,15 @@ export async function analyzeDefectPhoto(input: DefectAnalysisInput): Promise<AI
   "description": "Technical engineering summary of defect, dimensions, surface degradation, and public hazard",
   "repair_urgency": "Immediate (SLA 14 Days)" | "High (SLA 14 Days)" | "Standard (SLA 30 Days)",
   "suggested_action": "Prescribed civil repair methodology (e.g., Cold-mix asphalt patching, Precast concrete slab replacement)"
-}`
+}`,
             },
             {
               role: 'user',
-              content: `Civic report submitted in Bengaluru at GPS Coordinates: ${lat ?? 12.9716}, ${lng ?? 77.5946} (BBMP Municipal Jurisdiction). User notes: "${userNotes || (imageFile ? imageFile.name : 'Infrastructure damage inspection')}". Please provide technical inspection report.`
-            }
+              content: userContent,
+            },
           ],
           response_format: { type: 'json_object' },
-          temperature: 0.2,
+          temperature: 0.1,
         }),
       });
       clearTimeout(timeoutId);
@@ -121,6 +163,8 @@ export async function analyzeDefectPhoto(input: DefectAnalysisInput): Promise<AI
             suggested_action: parsed.suggested_action || 'Bituminous cold-mix tack coat and asphalt compaction.',
           };
         }
+      } else {
+        console.warn('[ai-service] Groq API returned status:', response.status);
       }
     } catch (err) {
       console.warn('[ai-service] Groq API call bypassed or timed out, utilizing deterministic inspector engine:', err);
@@ -218,11 +262,34 @@ export async function auditRepairPair(
     }
   }
 
-  // 2. If Groq API key is present, attempt client-side LLM audit with fast 2s timeout
+  // 2. If Groq API key is present, perform multimodal LLM vision audit
   if (GROQ_API_KEY && GROQ_API_KEY.startsWith('gsk_')) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const beforeOptimized = optimizeImageUrl(beforeUrl);
+      const afterOptimized = optimizeImageUrl(afterUrl);
+
+      const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+        {
+          type: 'text',
+          text: `Defect Category: ${defectCategory || 'Pothole'}. Verify whether the municipal repair work shown in the After photo resolves the infrastructure defect shown in the Before photo. Compare the surface condition, cross-section, and surrounding context.`,
+        },
+      ];
+
+      if (beforeOptimized && (beforeOptimized.startsWith('http') || beforeOptimized.startsWith('data:image/'))) {
+        userContent.push({
+          type: 'image_url',
+          image_url: { url: beforeOptimized },
+        });
+      }
+      if (afterOptimized && (afterOptimized.startsWith('http') || afterOptimized.startsWith('data:image/'))) {
+        userContent.push({
+          type: 'image_url',
+          image_url: { url: afterOptimized },
+        });
+      }
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -232,7 +299,7 @@ export async function auditRepairPair(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model: 'qwen/qwen3.8-27b',
           messages: [
             {
               role: 'system',
@@ -242,12 +309,12 @@ export async function auditRepairPair(
   "confidence": number between 0.85 and 0.99,
   "reasoning": "Technical comparison of before condition vs completed repair",
   "recommendations": "Closure recommendation or remedial actions"
-}`
+}`,
             },
             {
               role: 'user',
-              content: `Defect Category: ${defectCategory || 'Pothole'}. Before photo record: ${beforeUrl}. Repair submission photo record: ${afterUrl}. Please perform audit verification.`
-            }
+              content: userContent,
+            },
           ],
           response_format: { type: 'json_object' },
           temperature: 0.1,

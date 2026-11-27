@@ -8,6 +8,7 @@ import { DEFECT_CATEGORIES } from '@/lib/constants';
 import { MOCK_AUTHORITIES } from '@/lib/mock-data';
 import { Camera, Upload, MapPin, Sparkles, CheckCircle2, ShieldCheck, ArrowRight, ArrowLeft, Navigation, Crosshair, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/hooks/use-auth';
+import { fileToCompressedBase64 } from '@/lib/utils';
 
 // Verified Bengaluru Civic Defect Samples
 const REAL_SAMPLE_DEFECTS = [
@@ -65,6 +66,7 @@ export function ReportIssuePage() {
   // Form state - Default to Bengaluru Center (Vidhana Soudha / MG Road)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [lat, setLat] = useState<number>(12.9716);
   const [lng, setLng] = useState<number>(77.5946);
   const [userNotes, setUserNotes] = useState<string>('');
@@ -151,12 +153,14 @@ export function ReportIssuePage() {
       setPhotoFile(file);
       const url = URL.createObjectURL(file);
       setPhotoPreview(url);
+      fileToCompressedBase64(file).then((b64) => setImageBase64(b64));
     }
   };
 
   const handleSelectSample = (sample: typeof REAL_SAMPLE_DEFECTS[0]) => {
     setPhotoPreview(sample.url);
     setPhotoFile(null);
+    setImageBase64(null);
     setLat(sample.lat);
     setLng(sample.lng);
     setGpsAccuracy(null);
@@ -180,12 +184,19 @@ export function ReportIssuePage() {
     setIsAnalyzing(true);
 
     try {
+      let finalB64 = imageBase64;
+      if (!finalB64 && photoFile) {
+        finalB64 = await fileToCompressedBase64(photoFile);
+        setImageBase64(finalB64);
+      }
+
       const enrichedNotes = `${userNotes} [Bengaluru BBMP Ward: ${assignedAuthority?.ward_name || 'BBMP'}] ${
         gpsAccuracy ? `[GPS Precision: ±${gpsAccuracy}m]` : ''
       }`.trim();
 
       const result = await analyzeDefectPhoto({
         imageFile: photoFile || undefined,
+        imageBase64: finalB64 || undefined,
         imagePreview: photoPreview,
         lat,
         lng,

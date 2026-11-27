@@ -32,19 +32,49 @@ app.get(['/', '/health', '/api/health'], (req, res) => {
 });
 
 /**
+ * Helper to optimize external URLs (like Unsplash) for vision models
+ */
+function optimizeImageUrl(url) {
+  if (!url) return undefined;
+  if (url.includes('images.unsplash.com')) {
+    if (url.includes('w=')) {
+      return url.replace(/w=\d+/, 'w=600');
+    }
+    return `${url}&w=600`;
+  }
+  return url;
+}
+
+/**
  * 1. POST /api/ai/triage
- * Accepts defect report data, calls Groq LLaMA 3.3 with secret API key,
+ * Accepts defect report data, calls Groq Qwen 3.8 27B Multimodal Vision with secret API key,
  * and enforces the civil engineering schema.
  */
 app.post('/api/ai/triage', async (req, res) => {
   try {
-    const { lat, lng, userNotes = '', imageBase64, imageType = 'image/jpeg' } = req.body;
+    const { lat, lng, userNotes = '', imageBase64, imageUrl, imageType = 'image/jpeg' } = req.body;
     const groqKey = process.env.GROQ_API_KEY || process.env.VITE_GROQ_API_KEY;
 
     if (groqKey && groqKey.startsWith('gsk_')) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+        const resolvedImage = imageBase64 || optimizeImageUrl(imageUrl);
+
+        const userContent = [
+          {
+            type: 'text',
+            text: `Civic defect report submitted in Bengaluru at GPS Coordinates: Lat ${lat ?? 12.9716}, Lng ${lng ?? 77.5946} (BBMP Municipal Jurisdiction). User notes: "${userNotes || 'Municipal defect inspection'}". Inspect the defect photo visually and generate technical diagnostic report based on what you see.`,
+          },
+        ];
+
+        if (resolvedImage) {
+          userContent.push({
+            type: 'image_url',
+            image_url: { url: resolvedImage },
+          });
+        }
 
         const promptMessages = [
           {
@@ -61,7 +91,7 @@ app.post('/api/ai/triage', async (req, res) => {
           },
           {
             role: 'user',
-            content: `Civic defect report submitted in Bengaluru at GPS Coordinates: Lat ${lat ?? 12.9716}, Lng ${lng ?? 77.5946} (BBMP Municipal Jurisdiction). User notes: "${userNotes || 'Municipal defect inspection'}". Please generate technical diagnostic report.`,
+            content: userContent,
           },
         ];
 
@@ -73,10 +103,10 @@ app.post('/api/ai/triage', async (req, res) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
+            model: 'qwen/qwen3.8-27b',
             messages: promptMessages,
             response_format: { type: 'json_object' },
-            temperature: 0.2,
+            temperature: 0.1,
           }),
         });
 
@@ -89,7 +119,7 @@ app.post('/api/ai/triage', async (req, res) => {
             const parsed = JSON.parse(content);
             return res.json({
               success: true,
-              source: 'groq_llama_3.3',
+              source: 'groq_qwen_vision',
               report: {
                 defect_category: parsed.defect_category || 'Pothole',
                 severity: Number(parsed.severity) || 3,
@@ -167,7 +197,30 @@ app.post('/api/ai/audit', async (req, res) => {
     if (groqKey && groqKey.startsWith('gsk_')) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        const beforeOptimized = optimizeImageUrl(beforeUrl);
+        const afterOptimized = optimizeImageUrl(afterUrl);
+
+        const userContent = [
+          {
+            type: 'text',
+            text: `Defect Category: ${defectCategory}. Verify whether the municipal repair work shown in the After photo resolves the infrastructure defect shown in the Before photo. Compare the surface condition, cross-section, and surrounding context.`,
+          },
+        ];
+
+        if (beforeOptimized && (beforeOptimized.startsWith('http') || beforeOptimized.startsWith('data:image/'))) {
+          userContent.push({
+            type: 'image_url',
+            image_url: { url: beforeOptimized },
+          });
+        }
+        if (afterOptimized && (afterOptimized.startsWith('http') || afterOptimized.startsWith('data:image/'))) {
+          userContent.push({
+            type: 'image_url',
+            image_url: { url: afterOptimized },
+          });
+        }
 
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
@@ -177,7 +230,7 @@ app.post('/api/ai/audit', async (req, res) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
+            model: 'qwen/qwen3.8-27b',
             messages: [
               {
                 role: 'system',
@@ -191,7 +244,7 @@ app.post('/api/ai/audit', async (req, res) => {
               },
               {
                 role: 'user',
-                content: `Defect Category: ${defectCategory}. Before photo URL: ${beforeUrl}. Repair submission photo URL: ${afterUrl}. Please perform audit verification.`,
+                content: userContent,
               },
             ],
             response_format: { type: 'json_object' },
@@ -208,7 +261,7 @@ app.post('/api/ai/audit', async (req, res) => {
             const parsed = JSON.parse(content);
             return res.json({
               success: true,
-              source: 'groq_llama_3.3',
+              source: 'groq_qwen_vision',
               audit: {
                 verdict: parsed.verdict || 'Resolved',
                 confidence: Number(parsed.confidence) || 0.96,

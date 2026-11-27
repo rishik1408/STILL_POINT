@@ -5,6 +5,7 @@ import { fetchIssues, updateIssueStatus, uploadMediaFile } from '@/lib/data-serv
 import { auditRepairPair } from '@/lib/ai-service';
 import { Issue, AuditVerdict } from '@/types';
 import { Camera, CheckCircle2, Sparkles, ArrowLeft, Upload, ShieldCheck } from 'lucide-react';
+import { fileToCompressedBase64 } from '@/lib/utils';
 
 const SAMPLE_REPAIR_PHOTOS = [
   {
@@ -29,6 +30,7 @@ export function UpdateProgressPage() {
   const [loading, setLoading] = useState(true);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [workNotes, setWorkNotes] = useState('');
   const [isAuditing, setIsAuditing] = useState(false);
   const [auditResult, setAuditResult] = useState<{
@@ -61,12 +63,14 @@ export function UpdateProgressPage() {
       setPhotoFile(file);
       setPhotoPreview(URL.createObjectURL(file));
       setAuditResult(null);
+      fileToCompressedBase64(file).then((b64) => setImageBase64(b64));
     }
   };
 
   const handleSelectSample = (sample: typeof SAMPLE_REPAIR_PHOTOS[0]) => {
     setPhotoPreview(sample.url);
     setPhotoFile(null);
+    setImageBase64(null);
     setAuditResult(null);
   };
 
@@ -77,7 +81,14 @@ export function UpdateProgressPage() {
       const beforeUrl =
         issue.media?.find((m) => m.stage === 'before')?.file_url ||
         'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=800';
-      const res = await auditRepairPair(beforeUrl, photoPreview, issue.category);
+
+      let afterPayload = imageBase64 || photoPreview;
+      if (!imageBase64 && photoFile) {
+        afterPayload = await fileToCompressedBase64(photoFile);
+        setImageBase64(afterPayload);
+      }
+
+      const res = await auditRepairPair(beforeUrl, afterPayload, issue.category);
       setAuditResult(res);
     } catch (err) {
       console.error('Audit failed:', err);
