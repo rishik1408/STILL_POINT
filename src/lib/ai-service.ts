@@ -5,6 +5,13 @@
 
 import { AIReportResult, AuditVerdict, DefectCategory, Issue, Authority, Asset } from '@/types';
 
+// Optional Render backend URL for secure server-side API key handling
+const RENDER_API_URL =
+  (typeof import.meta !== 'undefined' &&
+    (import.meta.env?.VITE_RENDER_API_URL || import.meta.env?.VITE_API_URL)) ||
+  '';
+
+// Direct client fallback API key (if deployed without separate backend)
 const GROQ_API_KEY =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GROQ_API_KEY) ||
   '';
@@ -19,12 +26,48 @@ export interface DefectAnalysisInput {
 }
 
 /**
- * Analyzes infrastructure defect photo using AI or high-precision civic heuristics
+ * Analyzes infrastructure defect photo using:
+ * 1. Secure Render API proxy (if VITE_RENDER_API_URL is configured)
+ * 2. Direct Groq API client call (if VITE_GROQ_API_KEY is configured)
+ * 3. High-precision civil engineering heuristics (offline / zero-latency fallback)
  */
 export async function analyzeDefectPhoto(input: DefectAnalysisInput): Promise<AIReportResult> {
   const { imageFile, imageBase64, lat, lng, userNotes = '' } = input;
 
-  // Attempt Groq API if key is available with strict 2.5s fast timeout
+  // 1. Attempt secure Render backend if configured
+  if (RENDER_API_URL) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const response = await fetch(`${RENDER_API_URL.replace(/\/$/, '')}/api/ai/triage`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          lat,
+          lng,
+          userNotes,
+          imageType: imageFile?.type || 'image/jpeg',
+        }),
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.report) {
+          return data.report;
+        }
+      }
+    } catch (renderErr) {
+      console.warn('[ai-service] Render backend call skipped or timed out, cascading to client fallback:', renderErr);
+    }
+  }
+
+  // 2. Attempt direct Groq API if client key is available
   if (GROQ_API_KEY && GROQ_API_KEY.startsWith('gsk_')) {
     try {
       const controller = new AbortController();
@@ -143,7 +186,39 @@ export async function auditRepairPair(
   reasoning: string;
   recommendations: string;
 }> {
-  // If Groq API key is present, attempt LLM audit with fast 2s timeout
+  // 1. Attempt secure Render backend if configured
+  if (RENDER_API_URL) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+      const response = await fetch(`${RENDER_API_URL.replace(/\/$/, '')}/api/ai/audit`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          beforeUrl,
+          afterUrl,
+          defectCategory,
+        }),
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.audit) {
+          return data.audit;
+        }
+      }
+    } catch (renderErr) {
+      console.warn('[ai-service] Render audit call skipped, cascading to client fallback:', renderErr);
+    }
+  }
+
+  // 2. If Groq API key is present, attempt client-side LLM audit with fast 2s timeout
   if (GROQ_API_KEY && GROQ_API_KEY.startsWith('gsk_')) {
     try {
       const controller = new AbortController();

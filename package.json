@@ -1,12 +1,13 @@
 {
-  "name": "piams",
+  "name": "still-point",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "server": "node server/index.js"
   },
   "dependencies": {
     "@google/genai": "^3.6.1",
